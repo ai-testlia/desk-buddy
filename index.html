@@ -508,6 +508,21 @@
   }
   .pod-del:hover{ color: var(--rose); }
 
+  .station-item .name{ flex: 1; }
+  .station-item .meta{
+    max-width: 38%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pod-art{
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    margin-right: 10px;
+    background: rgba(255,255,255,0.05);
+  }
+
   .pod-sub{
     font-size: 11px;
     color: var(--ink-dim);
@@ -631,9 +646,11 @@
             <span class="live-dot" id="pod-dot"></span><span id="pod-now-text">未播放</span>
           </div>
           <div class="pod-add">
-            <input type="url" id="pod-url" placeholder="貼低 podcast RSS 或者 MP3 連結" />
-            <button class="btn" id="pod-add-btn">加入</button>
+            <input type="text" id="pod-url" placeholder="搜尋 Apple Podcasts，或者貼 RSS／MP3 連結" />
+            <button class="btn" id="pod-add-btn">搜尋</button>
           </div>
+          <div class="pod-sub" id="pod-results-sub" hidden>搜尋結果（撳一下加入）</div>
+          <div class="station-list" id="pod-results"></div>
           <div class="station-list" id="pod-list"></div>
           <div class="pod-sub" id="pod-sub" hidden>最新單集</div>
           <div class="station-list pod-episodes" id="pod-episodes"></div>
@@ -1010,6 +1027,14 @@
         : openShowUrl === p.url;
       item.className = 'station-item' + (isActive ? ' active' : '');
 
+      if(p.art){
+        const art = document.createElement('img');
+        art.className = 'pod-art';
+        art.src = p.art;
+        art.alt = '';
+        art.addEventListener('error', () => art.remove());
+        item.appendChild(art);
+      }
       const name = document.createElement('span');
       name.className = 'name';
       name.textContent = p.name;
@@ -1090,9 +1115,78 @@
       });
   }
 
-  podAddBtn.addEventListener('click', () => {
-    const url = podUrlInput.value.trim();
-    if(!url) return;
+  // ---- Apple Podcasts 目錄搜尋（同 iPad 個 Podcasts app 同一個節目庫） ----
+  const podResultsEl = document.getElementById('pod-results');
+  const podResultsSubEl = document.getElementById('pod-results-sub');
+  const POD_SEARCH_COUNTRY = 'HK'; // 想搜其他地區嘅節目庫可以改呢度
+
+  function clearSearchResults(){
+    podResultsEl.innerHTML = '';
+    podResultsSubEl.hidden = true;
+  }
+
+  function renderSearchResults(results){
+    clearSearchResults();
+    if(results.length === 0) return;
+    podResultsSubEl.hidden = false;
+    results.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'station-item';
+      if(r.artworkUrl100){
+        const art = document.createElement('img');
+        art.className = 'pod-art';
+        art.src = r.artworkUrl100;
+        art.alt = '';
+        art.addEventListener('error', () => art.remove());
+        item.appendChild(art);
+      }
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = r.collectionName || 'Podcast';
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = r.artistName || '';
+      item.appendChild(name);
+      item.appendChild(meta);
+      item.addEventListener('click', () => {
+        if(podcasts.some(p => p.url === r.feedUrl)){
+          podNowText.textContent = '加咗呢個節目喇';
+          return;
+        }
+        const show = { name: r.collectionName || 'Podcast', url: r.feedUrl, type: 'rss', art: r.artworkUrl100 || '' };
+        podcasts.push(show);
+        savePodcasts();
+        renderPodcasts();
+        clearSearchResults();
+        podUrlInput.value = '';
+        podNowText.textContent = '已加入：' + show.name;
+        openShow(show); // 加完即刻攞埋最新單集
+      });
+      podResultsEl.appendChild(item);
+    });
+  }
+
+  function searchPodcasts(term){
+    podNowText.textContent = '搵緊「' + term + '」…';
+    setBuddyState('connect');
+    const url = 'https://itunes.apple.com/search?media=podcast&limit=8'
+      + '&country=' + POD_SEARCH_COUNTRY
+      + '&term=' + encodeURIComponent(term);
+    fetch(url)
+      .then(r => { if(!r.ok) throw new Error('bad'); return r.json(); })
+      .then(data => {
+        const results = (data.results || []).filter(r => r.feedUrl);
+        renderSearchResults(results);
+        podNowText.textContent = results.length ? '搵到 ' + results.length + ' 個節目' : '搵唔到，試下第二個關鍵字';
+        buddyRest();
+      })
+      .catch(() => {
+        podNowText.textContent = '搜尋唔到，check下網絡';
+        buddyRest();
+      });
+  }
+
+  function addByUrl(url){
     if(podcasts.some(p => p.url === url)){
       podNowText.textContent = '加咗呢個連結喇';
       return;
@@ -1122,6 +1216,22 @@
           buddyRest();
         });
     }
+  }
+
+  podAddBtn.addEventListener('click', () => {
+    const v = podUrlInput.value.trim();
+    if(!v) return;
+    if(/^https?:\/\//i.test(v)){
+      clearSearchResults();
+      addByUrl(v);
+    } else {
+      searchPodcasts(v);
+    }
+  });
+
+  // 打字係搜尋、貼連結係加入，個掣自動轉字
+  podUrlInput.addEventListener('input', () => {
+    podAddBtn.textContent = /^https?:\/\//i.test(podUrlInput.value.trim()) ? '加入' : '搜尋';
   });
 
   podUrlInput.addEventListener('keydown', ev => {
