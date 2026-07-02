@@ -185,7 +185,7 @@
     padding-top: 16px;
     display:flex;
     gap: 14px;
-    align-items:flex-start;
+    align-items:center;
   }
 
   .quote-box .qtag{
@@ -195,7 +195,6 @@
     padding: 3px 9px;
     border-radius: 999px;
     flex-shrink:0;
-    margin-top: 2px;
     letter-spacing: 1px;
   }
 
@@ -203,6 +202,142 @@
     font-size: 14px;
     line-height:1.6;
     color: var(--ink);
+  }
+
+  /* --- AI 陪伴表情：機甲小智（暗色／薄荷）同貓仔小喵（暖色） --- */
+  .buddy{
+    width: 62px; height: 62px;
+    flex-shrink:0;
+    position:relative;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .buddy:active{ transform: scale(0.94); }
+
+  .buddy .face{
+    position:absolute;
+    top:0; left:0; right:0; bottom:0;
+    border-radius: 16px;
+    display:none;
+  }
+  .buddy .face-mecha{ display:block; }
+  body.theme-cat-mode .buddy .face-mecha{ display:none; }
+  body.theme-cat-mode .buddy .face-cat{ display:block; }
+
+  .face-mecha{
+    background: linear-gradient(150deg, #2B333E, #14181D);
+    border: 1px solid var(--divider);
+  }
+  .face-mecha .antenna{
+    position:absolute;
+    top:-7px; left:50%;
+    width:2px; height:7px;
+    margin-left:-1px;
+    background: var(--teal);
+  }
+  .face-mecha .antenna::after{
+    content:'';
+    position:absolute;
+    top:-5px; left:-2px;
+    width:6px; height:6px;
+    border-radius:50%;
+    background: var(--teal);
+  }
+  .face-mecha .eye{
+    position:absolute;
+    top:19px;
+    width:11px; height:15px;
+    border-radius: 5px;
+    background: #EFEAE0;
+    box-shadow: 0 0 10px rgba(95,168,160,0.4);
+  }
+  .face-mecha .mouth{
+    position:absolute;
+    bottom:12px; left:50%;
+    width:16px; height:5px;
+    margin-left:-8px;
+    border-radius: 3px;
+    background: var(--teal);
+  }
+
+  .face-cat{
+    background: linear-gradient(150deg, #F6D9C8, #E8A98F);
+    border: 1px solid #E0B49E;
+  }
+  .face-cat .ear{
+    position:absolute;
+    top:-5px;
+    width:18px; height:18px;
+    border-radius: 5px;
+    background: #F0CBB4;
+    transform: rotate(45deg);
+  }
+  .face-cat .ear.l{ left:5px; }
+  .face-cat .ear.r{ right:5px; }
+  .face-cat .eye{
+    position:absolute;
+    top:25px;
+    width:9px; height:11px;
+    border-radius:50%;
+    background:#4A2C1E;
+  }
+  .face-cat .mouth{
+    position:absolute;
+    bottom:13px; left:50%;
+    width:14px; height:7px;
+    margin-left:-7px;
+    border:2px solid #7A4632;
+    border-top:none;
+    border-radius: 0 0 10px 10px;
+  }
+
+  .buddy .eye.l{ left:14px; }
+  .buddy .eye.r{ right:14px; }
+
+  /* 表情狀態：待機眨眼／連接眼仔碌來碌去／講嘢郁嘴 */
+  .buddy .eye{ animation: blink 4.5s infinite; }
+  .buddy[data-state="connect"] .eye{ animation: lookaround 1.6s ease-in-out infinite; }
+  @keyframes lookaround{
+    0%,100%{ transform: translateX(0); }
+    30%{ transform: translateX(-3px); }
+    70%{ transform: translateX(3px); }
+  }
+  .face-mecha .mouth{ transform: scaleY(0.35); }
+  .buddy[data-state="speak"] .mouth{
+    animation: chat 0.35s ease-in-out infinite alternate;
+  }
+  @keyframes chat{
+    from{ transform: scaleY(0.35); }
+    to{ transform: scaleY(1.15); }
+  }
+
+  /* 對話氣泡 */
+  .bubble{
+    position:relative;
+    flex:1;
+    border:1px solid var(--divider);
+    border-radius: 14px;
+    padding: 11px 16px 12px;
+  }
+  .bubble::before{
+    content:'';
+    position:absolute;
+    left:-6px; top:24px;
+    width:10px; height:10px;
+    background: var(--screen);
+    border-left:1px solid var(--divider);
+    border-bottom:1px solid var(--divider);
+    transform: rotate(45deg);
+  }
+  .bubble-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom: 7px;
+  }
+  .buddy-status{
+    font-size: 11px;
+    color: var(--ink-dim);
   }
 
   .theme-row{
@@ -347,7 +482,7 @@
   }
 
   @media (prefers-reduced-motion: reduce){
-    .companion .eye{ animation: none; }
+    .companion .eye, .buddy .eye, .buddy .mouth{ animation: none; }
   }
 </style>
 </head>
@@ -383,8 +518,25 @@
       </div>
 
       <div class="quote-box">
-        <span class="qtag">今日一句</span>
-        <p id="quote">你只管努力，剩下的交給時間。</p>
+        <div class="buddy" id="buddy" data-state="idle">
+          <div class="face face-mecha">
+            <span class="antenna"></span>
+            <span class="eye l"></span><span class="eye r"></span>
+            <span class="mouth"></span>
+          </div>
+          <div class="face face-cat">
+            <span class="ear l"></span><span class="ear r"></span>
+            <span class="eye l"></span><span class="eye r"></span>
+            <span class="mouth"></span>
+          </div>
+        </div>
+        <div class="bubble">
+          <div class="bubble-top">
+            <span class="qtag">今日一句</span>
+            <span class="buddy-status" id="buddy-status">小智 · 待機中</span>
+          </div>
+          <p id="quote">你只管努力，剩下的交給時間。</p>
+        </div>
       </div>
 
       <div class="section" data-key="radio">
@@ -430,6 +582,47 @@
   updateClock();
   setInterval(updateClock, 1000 * 10); // 每十秒夠用，慳返電
 
+  // ---- AI 陪伴表情：待機／連接／講嘢三種狀態 ----
+  const buddyEl = document.getElementById('buddy');
+  const buddyStatusEl = document.getElementById('buddy-status');
+  const topbarStatusEl = document.getElementById('companion-status');
+  const BUDDY_STATE_TEXT = { idle: '待機中', connect: '連接緊…', speak: '講緊嘢…' };
+  let buddyState = 'idle';
+  let buddyTalkTimer = null;
+
+  function buddyName(){
+    return document.body.classList.contains('theme-cat-mode') ? '小喵' : '小智';
+  }
+
+  function renderBuddy(){
+    buddyEl.dataset.state = buddyState;
+    buddyStatusEl.textContent = `${buddyName()} · ${BUDDY_STATE_TEXT[buddyState]}`;
+    topbarStatusEl.textContent = BUDDY_STATE_TEXT[buddyState];
+  }
+
+  function setBuddyState(state){
+    buddyState = state;
+    renderBuddy();
+  }
+
+  // 冇嘢做嗰陣返去待機；電台播緊就當佢講緊嘢
+  function buddyRest(){
+    let playing = false;
+    try{ playing = !radioPlayer.paused; }catch(e){}
+    setBuddyState(playing ? 'speak' : 'idle');
+  }
+
+  // 撳一下小夥伴，佢會隨機講句嘢
+  buddyEl.addEventListener('click', () => {
+    const q = quotes[Math.floor(Math.random() * quotes.length)];
+    document.getElementById('quote').textContent = q;
+    setBuddyState('speak');
+    clearTimeout(buddyTalkTimer);
+    buddyTalkTimer = setTimeout(buddyRest, 2600);
+  });
+
+  renderBuddy();
+
   // ---- 真天氣：攞 iPad 定位 + OpenWeatherMap ----
   // 記住去 https://openweathermap.org/api 免費攞一條 API key，填落下面呢行就得
   const OWM_API_KEY = 'f4726836ec886e8f7f41baada37d4314';
@@ -442,6 +635,7 @@
   function showWeatherError(msg){
     document.getElementById('temp').textContent = '--°C';
     document.getElementById('cond').textContent = msg;
+    buddyRest();
   }
 
   function fetchWeather(lat, lon){
@@ -463,6 +657,7 @@
         document.getElementById('temp').textContent = `${temp}°C`;
         document.getElementById('cond').textContent = cond;
         document.getElementById('loc').textContent = data.name || '--';
+        buddyRest();
       })
       .catch(() => showWeatherError('暫時攞唔到天氣'));
   }
@@ -473,6 +668,7 @@
       return;
     }
     document.getElementById('cond').textContent = '定位緊…';
+    setBuddyState('connect');
     navigator.geolocation.getCurrentPosition(
       pos => fetchWeather(pos.coords.latitude, pos.coords.longitude),
       () => showWeatherError('未能取得定位'),
@@ -501,6 +697,7 @@
     if(theme === 'cat') document.body.classList.add('theme-cat-mode');
     if(theme === 'mint') document.body.classList.add('theme-mint-mode');
     themeDots.forEach(d => d.classList.toggle('active', d.dataset.theme === theme));
+    renderBuddy(); // 換主題會換埋小夥伴造型同名
     try{ localStorage.setItem('desk-buddy-theme', theme); }catch(e){}
   }
   themeDots.forEach(dot => {
@@ -569,6 +766,7 @@
     radioPlayer.load();
     currentStationIndex = -1;
     updateRadioUI();
+    setBuddyState('idle');
   }
 
   function toggleStation(i){
@@ -578,9 +776,11 @@
     }
     currentStationIndex = i;
     radioPlayer.src = RADIO_STATIONS[i].url;
+    setBuddyState('connect');
     radioPlayer.play().catch(() => {
       radioNowText.textContent = '播放唔到，check下網絡';
       radioDot.classList.remove('on');
+      setBuddyState('idle');
     });
     updateRadioUI();
   }
@@ -593,9 +793,12 @@
     }
   });
 
+  radioPlayer.addEventListener('playing', () => setBuddyState('speak'));
+
   radioPlayer.addEventListener('error', () => {
     radioNowText.textContent = '電台暫時連唔到';
     radioDot.classList.remove('on');
+    setBuddyState('idle');
   });
 
   renderStations();
