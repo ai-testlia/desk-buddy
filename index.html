@@ -222,6 +222,108 @@
     opacity: 0.55;
   }
 
+  /* --- 通用可折疊 section（電台／podcast／日曆／番茄鐘都用呢個殼） --- */
+  .section{
+    border-top: 1px solid var(--divider);
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  .section-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    cursor:pointer;
+    user-select:none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .section-header .stag{
+    font-size: 11px;
+    color: var(--gold);
+    border: 1px solid var(--gold-dim);
+    padding: 3px 9px;
+    border-radius: 999px;
+    letter-spacing: 1px;
+  }
+
+  .section-header .chev{
+    font-size: 11px;
+    color: var(--ink-dim);
+    transition: transform 0.2s ease;
+  }
+
+  .section.collapsed .chev{ transform: rotate(-90deg); }
+  .section.collapsed .section-body{ display:none; }
+
+  .section-body{ margin-top: 14px; }
+
+  .btn{
+    font-size: 12px;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--divider);
+    padding: 7px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .btn:hover{ border-color: var(--gold); color: var(--gold); }
+  .btn:active{ transform: scale(0.97); }
+
+  /* --- 電台 --- */
+  .now-playing{
+    font-size: 13px;
+    color: var(--ink-dim);
+    margin-bottom: 10px;
+  }
+  .now-playing .live-dot{
+    display:none;
+    width:6px; height:6px;
+    border-radius:50%;
+    background: var(--teal);
+    margin-right:7px;
+    vertical-align:middle;
+  }
+  .now-playing .live-dot.on{
+    display:inline-block;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ opacity:1; }
+    50%{ opacity:0.3; }
+  }
+
+  .station-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .station-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid var(--divider);
+    font-size:13px;
+    cursor:pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .station-item:hover{ border-color: var(--gold-dim); }
+  .station-item.active{
+    border-color: var(--gold);
+    background: linear-gradient(90deg, var(--gold-dim), transparent);
+  }
+  .station-item .badge{ font-size:11px; color: var(--ink-dim); }
+
+  .radio-controls{
+    display:flex;
+    justify-content:flex-end;
+    margin-top:12px;
+  }
+
   /* --- light / cat theme override --- */
   body.theme-cat-mode{
     --bg:#F7ECE4; --screen:#FBEFE7; --screen-edge:#F0DCCF;
@@ -278,6 +380,23 @@
       <div class="quote-box">
         <span class="qtag">今日一句</span>
         <p id="quote">你只管努力，剩下的交給時間。</p>
+      </div>
+
+      <div class="section" data-key="radio">
+        <div class="section-header">
+          <span class="stag">電台</span>
+          <span class="chev">▾</span>
+        </div>
+        <div class="section-body">
+          <div class="now-playing" id="radio-now">
+            <span class="live-dot" id="radio-dot"></span><span id="radio-now-text">未播放</span>
+          </div>
+          <div class="station-list" id="radio-list"></div>
+          <div class="radio-controls">
+            <button class="btn" id="radio-toggle">播放</button>
+          </div>
+          <audio id="radio-player" preload="none"></audio>
+        </div>
       </div>
     </div>
 
@@ -387,6 +506,96 @@
   let savedTheme = 'dark';
   try{ savedTheme = localStorage.getItem('desk-buddy-theme') || 'dark'; }catch(e){}
   applyTheme(savedTheme);
+
+  // ---- 可折疊 section，狀態存落 localStorage ----
+  document.querySelectorAll('.section').forEach(section => {
+    const key = `desk-buddy-collapse-${section.dataset.key}`;
+    let collapsed = false;
+    try{ collapsed = localStorage.getItem(key) === '1'; }catch(e){}
+    if(collapsed) section.classList.add('collapsed');
+
+    const header = section.querySelector('.section-header');
+    header.addEventListener('click', () => {
+      section.classList.toggle('collapsed');
+      try{ localStorage.setItem(key, section.classList.contains('collapsed') ? '1' : '0'); }catch(e){}
+    });
+  });
+
+  // ---- 電台 ----
+  const RADIO_STATIONS = [
+    { name: 'Groove Salad', desc: '氛圍 chillout', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
+    { name: 'Drone Zone', desc: '深層氛圍', url: 'https://ice1.somafm.com/dronezone-128-mp3' },
+    { name: 'Secret Agent', desc: '間諜爵士 lounge', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
+    { name: 'Beat Blender', desc: '深房 house', url: 'https://ice1.somafm.com/beatblender-128-mp3' }
+  ];
+
+  const radioPlayer = document.getElementById('radio-player');
+  const radioListEl = document.getElementById('radio-list');
+  const radioNowText = document.getElementById('radio-now-text');
+  const radioDot = document.getElementById('radio-dot');
+  const radioToggleBtn = document.getElementById('radio-toggle');
+  let currentStationIndex = -1;
+
+  function renderStations(){
+    radioListEl.innerHTML = '';
+    RADIO_STATIONS.forEach((st, i) => {
+      const item = document.createElement('div');
+      item.className = 'station-item' + (i === currentStationIndex ? ' active' : '');
+      item.innerHTML = `<span class="name">${st.name}</span><span class="badge">${st.desc}</span>`;
+      item.addEventListener('click', () => toggleStation(i));
+      radioListEl.appendChild(item);
+    });
+  }
+
+  function updateRadioUI(){
+    renderStations();
+    if(currentStationIndex === -1){
+      radioNowText.textContent = '未播放';
+      radioDot.classList.remove('on');
+      radioToggleBtn.textContent = '播放';
+    } else {
+      radioNowText.textContent = RADIO_STATIONS[currentStationIndex].name;
+      radioDot.classList.add('on');
+      radioToggleBtn.textContent = '停止';
+    }
+  }
+
+  function stopRadio(){
+    radioPlayer.pause();
+    radioPlayer.removeAttribute('src');
+    radioPlayer.load();
+    currentStationIndex = -1;
+    updateRadioUI();
+  }
+
+  function toggleStation(i){
+    if(currentStationIndex === i && !radioPlayer.paused){
+      stopRadio();
+      return;
+    }
+    currentStationIndex = i;
+    radioPlayer.src = RADIO_STATIONS[i].url;
+    radioPlayer.play().catch(() => {
+      radioNowText.textContent = '播放唔到，check下網絡';
+      radioDot.classList.remove('on');
+    });
+    updateRadioUI();
+  }
+
+  radioToggleBtn.addEventListener('click', () => {
+    if(currentStationIndex === -1){
+      toggleStation(0);
+    } else {
+      stopRadio();
+    }
+  });
+
+  radioPlayer.addEventListener('error', () => {
+    radioNowText.textContent = '電台暫時連唔到';
+    radioDot.classList.remove('on');
+  });
+
+  renderStations();
 </script>
 
 </body>
