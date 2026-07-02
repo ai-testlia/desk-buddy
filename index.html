@@ -463,6 +463,71 @@
     margin-top:12px;
   }
 
+  /* --- 播客 --- */
+  .pod-add{
+    display:flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .pod-add input{
+    flex:1;
+    min-width:0;
+    font-size: 13px;
+    font-family:'Noto Sans HK', sans-serif;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--divider);
+    border-radius: 999px;
+    padding: 7px 16px;
+    outline: none;
+  }
+  .pod-add input:focus{ border-color: var(--gold-dim); }
+  .pod-add input::placeholder{ color: var(--ink-dim); opacity: 0.7; }
+
+  .station-item .name{
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .station-item .meta{
+    font-size: 11px;
+    color: var(--ink-dim);
+    flex-shrink: 0;
+    margin-left: 10px;
+  }
+
+  .pod-del{
+    font-size: 15px;
+    color: var(--ink-dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 2px 0 12px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .pod-del:hover{ color: var(--rose); }
+
+  .pod-sub{
+    font-size: 11px;
+    color: var(--ink-dim);
+    letter-spacing: 1px;
+    margin: 14px 0 8px;
+  }
+
+  .pod-episodes{
+    max-height: 224px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pod-hint{
+    font-size: 12px;
+    color: var(--ink-dim);
+    opacity: 0.75;
+    padding: 4px 2px;
+  }
+
   /* --- light / cat theme override --- */
   body.theme-cat-mode{
     --bg:#F7ECE4; --screen:#FBEFE7; --screen-edge:#F0DCCF;
@@ -555,6 +620,26 @@
           <audio id="radio-player" preload="none"></audio>
         </div>
       </div>
+
+      <div class="section" data-key="podcast">
+        <div class="section-header">
+          <span class="stag">播客</span>
+          <span class="chev">▾</span>
+        </div>
+        <div class="section-body">
+          <div class="now-playing">
+            <span class="live-dot" id="pod-dot"></span><span id="pod-now-text">未播放</span>
+          </div>
+          <div class="pod-add">
+            <input type="url" id="pod-url" placeholder="貼低 podcast RSS 或者 MP3 連結" />
+            <button class="btn" id="pod-add-btn">加入</button>
+          </div>
+          <div class="station-list" id="pod-list"></div>
+          <div class="pod-sub" id="pod-sub" hidden>最新單集</div>
+          <div class="station-list pod-episodes" id="pod-episodes"></div>
+          <audio id="pod-player" preload="none"></audio>
+        </div>
+      </div>
     </div>
 
     <div class="theme-row">
@@ -605,10 +690,10 @@
     renderBuddy();
   }
 
-  // 冇嘢做嗰陣返去待機；電台播緊就當佢講緊嘢
+  // 冇嘢做嗰陣返去待機；電台或者播客播緊就當佢講緊嘢
   function buddyRest(){
     let playing = false;
-    try{ playing = !radioPlayer.paused; }catch(e){}
+    try{ playing = !radioPlayer.paused || !podPlayer.paused; }catch(e){}
     setBuddyState(playing ? 'speak' : 'idle');
   }
 
@@ -774,6 +859,7 @@
       stopRadio();
       return;
     }
+    stopPodcast(); // 電台同播客唔會同時響
     currentStationIndex = i;
     radioPlayer.src = RADIO_STATIONS[i].url;
     setBuddyState('connect');
@@ -802,6 +888,266 @@
   });
 
   renderStations();
+
+  // ---- 播客：自訂 RSS feed 或者直接 audio 連結 ----
+  const podPlayer = document.getElementById('pod-player');
+  const podListEl = document.getElementById('pod-list');
+  const podEpisodesEl = document.getElementById('pod-episodes');
+  const podSubEl = document.getElementById('pod-sub');
+  const podNowText = document.getElementById('pod-now-text');
+  const podDot = document.getElementById('pod-dot');
+  const podUrlInput = document.getElementById('pod-url');
+  const podAddBtn = document.getElementById('pod-add-btn');
+
+  let podcasts = [];
+  try{ podcasts = JSON.parse(localStorage.getItem('desk-buddy-podcasts')) || []; }catch(e){}
+  let podEpisodes = [];       // 而家打開緊嗰個節目嘅單集
+  let openShowUrl = null;
+  let currentEpisodeUrl = null;
+  let currentEpisodeTitle = '';
+
+  function savePodcasts(){
+    try{ localStorage.setItem('desk-buddy-podcasts', JSON.stringify(podcasts)); }catch(e){}
+  }
+
+  function isAudioUrl(u){
+    return /\.(mp3|m4a|aac|ogg|wav)(\?.*)?$/i.test(u);
+  }
+
+  // 直接 fetch 唔到（多數係 CORS）就行公共 proxy 兜一兜
+  function fetchFeed(url){
+    return fetch(url)
+      .then(r => { if(!r.ok) throw new Error('bad'); return r.text(); })
+      .catch(() =>
+        fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url))
+          .then(r => { if(!r.ok) throw new Error('bad'); return r.text(); })
+      );
+  }
+
+  function parseFeed(xmlText){
+    const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    if(doc.querySelector('parsererror')) throw new Error('parse');
+    const chTitle = doc.querySelector('channel > title');
+    const items = [];
+    const nodes = doc.querySelectorAll('item');
+    for(let i = 0; i < nodes.length && items.length < 10; i++){
+      const it = nodes[i];
+      const enc = it.querySelector('enclosure');
+      const audio = enc && enc.getAttribute('url');
+      if(!audio) continue;
+      const t = it.querySelector('title');
+      const d = it.querySelector('pubDate');
+      items.push({
+        title: (t && t.textContent.trim()) || '（無題）',
+        url: audio,
+        date: d ? d.textContent : ''
+      });
+    }
+    return { title: (chTitle && chTitle.textContent.trim()) || 'Podcast', items };
+  }
+
+  function fmtEpDate(str){
+    const d = new Date(str);
+    if(isNaN(d)) return '';
+    return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function updatePodNow(){
+    if(currentEpisodeUrl && !podPlayer.paused){
+      podNowText.textContent = currentEpisodeTitle;
+      podDot.classList.add('on');
+    } else {
+      podNowText.textContent = '未播放';
+      podDot.classList.remove('on');
+    }
+  }
+
+  function stopPodcast(){
+    podPlayer.pause();
+    podPlayer.removeAttribute('src');
+    podPlayer.load();
+    currentEpisodeUrl = null;
+    currentEpisodeTitle = '';
+    updatePodNow();
+    renderEpisodes();
+    renderPodcasts();
+  }
+
+  function playEpisode(title, url){
+    if(currentEpisodeUrl === url && !podPlayer.paused){
+      stopPodcast();
+      setBuddyState('idle');
+      return;
+    }
+    stopRadio(); // 電台同播客唔會同時響
+    currentEpisodeUrl = url;
+    currentEpisodeTitle = title;
+    podPlayer.src = url;
+    setBuddyState('connect');
+    podNowText.textContent = '載入緊…';
+    podPlayer.play().catch(() => {
+      podNowText.textContent = '播唔到呢集';
+      podDot.classList.remove('on');
+      setBuddyState('idle');
+    });
+    renderEpisodes();
+    renderPodcasts();
+  }
+
+  function renderPodcasts(){
+    podListEl.innerHTML = '';
+    if(podcasts.length === 0){
+      const hint = document.createElement('div');
+      hint.className = 'pod-hint';
+      hint.textContent = '仲未有節目：貼低 RSS 連結（會自動攞節目名）或者直接 MP3 連結';
+      podListEl.appendChild(hint);
+      return;
+    }
+    podcasts.forEach((p, i) => {
+      const item = document.createElement('div');
+      const isActive = p.type === 'audio'
+        ? (currentEpisodeUrl === p.url && !podPlayer.paused)
+        : openShowUrl === p.url;
+      item.className = 'station-item' + (isActive ? ' active' : '');
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = p.name;
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = p.type === 'rss' ? 'RSS' : '音訊';
+      const del = document.createElement('button');
+      del.className = 'pod-del';
+      del.textContent = '×';
+      del.setAttribute('aria-label', '刪除');
+      del.addEventListener('click', ev => {
+        ev.stopPropagation();
+        if(p.type === 'audio' && currentEpisodeUrl === p.url) stopPodcast();
+        if(openShowUrl === p.url){ openShowUrl = null; podEpisodes = []; renderEpisodes(); }
+        podcasts.splice(i, 1);
+        savePodcasts();
+        renderPodcasts();
+      });
+
+      item.appendChild(name);
+      item.appendChild(meta);
+      item.appendChild(del);
+      item.addEventListener('click', () => {
+        if(p.type === 'audio'){
+          playEpisode(p.name, p.url);
+        } else {
+          openShow(p);
+        }
+      });
+      podListEl.appendChild(item);
+    });
+  }
+
+  function renderEpisodes(){
+    podEpisodesEl.innerHTML = '';
+    podSubEl.hidden = podEpisodes.length === 0;
+    podEpisodes.forEach(ep => {
+      const item = document.createElement('div');
+      const isActive = currentEpisodeUrl === ep.url && !podPlayer.paused;
+      item.className = 'station-item' + (isActive ? ' active' : '');
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = ep.title;
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = fmtEpDate(ep.date);
+      item.appendChild(name);
+      item.appendChild(meta);
+      item.addEventListener('click', () => playEpisode(ep.title, ep.url));
+      podEpisodesEl.appendChild(item);
+    });
+  }
+
+  function openShow(p){
+    if(openShowUrl === p.url){ // 再撳一次就收埋
+      openShowUrl = null;
+      podEpisodes = [];
+      renderEpisodes();
+      renderPodcasts();
+      return;
+    }
+    podNowText.textContent = '載入緊節目…';
+    setBuddyState('connect');
+    fetchFeed(p.url)
+      .then(parseFeed)
+      .then(feed => {
+        openShowUrl = p.url;
+        podEpisodes = feed.items;
+        renderEpisodes();
+        renderPodcasts();
+        updatePodNow();
+        buddyRest();
+        if(feed.items.length === 0) podNowText.textContent = '呢個 feed 冇音訊單集';
+      })
+      .catch(() => {
+        podNowText.textContent = '讀唔到呢個 feed';
+        buddyRest();
+      });
+  }
+
+  podAddBtn.addEventListener('click', () => {
+    const url = podUrlInput.value.trim();
+    if(!url) return;
+    if(podcasts.some(p => p.url === url)){
+      podNowText.textContent = '加咗呢個連結喇';
+      return;
+    }
+    if(isAudioUrl(url)){
+      let name = '音訊';
+      try{ name = decodeURIComponent(url.split('/').pop().split('?')[0]) || '音訊'; }catch(e){}
+      podcasts.push({ name, url, type: 'audio' });
+      savePodcasts();
+      renderPodcasts();
+      podUrlInput.value = '';
+    } else {
+      podNowText.textContent = '載入緊 feed…';
+      setBuddyState('connect');
+      fetchFeed(url)
+        .then(parseFeed)
+        .then(feed => {
+          podcasts.push({ name: feed.title, url, type: 'rss' });
+          savePodcasts();
+          renderPodcasts();
+          podUrlInput.value = '';
+          podNowText.textContent = '已加入：' + feed.title;
+          buddyRest();
+        })
+        .catch(() => {
+          podNowText.textContent = '讀唔到呢條 feed，check下條連結';
+          buddyRest();
+        });
+    }
+  });
+
+  podUrlInput.addEventListener('keydown', ev => {
+    if(ev.key === 'Enter') podAddBtn.click();
+  });
+
+  podPlayer.addEventListener('playing', () => {
+    updatePodNow();
+    renderEpisodes();
+    renderPodcasts();
+    setBuddyState('speak');
+  });
+
+  podPlayer.addEventListener('ended', () => {
+    stopPodcast();
+    setBuddyState('idle');
+  });
+
+  podPlayer.addEventListener('error', () => {
+    if(!currentEpisodeUrl) return; // stopPodcast 清 src 都會觸發 error，唔使理
+    podNowText.textContent = '播唔到呢集';
+    podDot.classList.remove('on');
+    setBuddyState('idle');
+  });
+
+  renderPodcasts();
 </script>
 
 </body>
