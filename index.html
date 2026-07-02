@@ -38,7 +38,7 @@
 
   .device{
     width: 100%;
-    max-width: 620px;
+    max-width: 960px;
     background: linear-gradient(155deg, var(--screen-edge), var(--screen) 12%);
     border-radius: 28px;
     padding: 22px;
@@ -117,14 +117,14 @@
   .clock-row{
     display:flex;
     justify-content:space-between;
-    align-items:flex-start;
-    gap: 16px;
+    align-items:center;
+    gap: 24px;
     margin-bottom: 20px;
   }
 
   .clock{
     font-family:'Space Grotesk', sans-serif;
-    font-size: 68px;
+    font-size: 76px;
     font-weight: 600;
     letter-spacing: 1px;
     line-height:1;
@@ -148,13 +148,25 @@
   }
 
   .weather{
-    text-align:right;
+    text-align:center;
     flex-shrink:0;
+    min-width: 150px;
+    border: 1px solid var(--divider);
+    border-radius: 14px;
+    padding: 14px 22px;
+    background: rgba(255,255,255,0.02);
+  }
+  .weather .wtag{
+    font-size: 10px;
+    color: var(--ink-dim);
+    letter-spacing: 1.5px;
+    opacity:0.7;
   }
   .weather .temp{
     font-family:'Space Grotesk', sans-serif;
-    font-size: 26px;
+    font-size: 30px;
     font-weight:600;
+    margin-top: 4px;
   }
   .weather .cond{
     font-size: 12px;
@@ -213,14 +225,6 @@
   .theme-dark{ background: linear-gradient(135deg,#171B21,#23282F); }
   .theme-cat{ background: linear-gradient(135deg,#F2D9CE,#E8A2A8); }
   .theme-mint{ background: linear-gradient(135deg,#DCE8E1,#8FBBA8); }
-
-  .hint{
-    text-align:center;
-    font-size: 11px;
-    color: var(--ink-dim);
-    margin-top: 16px;
-    opacity: 0.55;
-  }
 
   /* --- 通用可折疊 section（電台／podcast／日曆／番茄鐘都用呢個殼） --- */
   .section{
@@ -371,6 +375,7 @@
           </div>
         </div>
         <div class="weather">
+          <div class="wtag">WEATHER</div>
           <div class="temp" id="temp">--°C</div>
           <div class="cond" id="cond">載入中</div>
           <div class="loc" id="loc">London</div>
@@ -406,8 +411,6 @@
       <div class="theme-dot theme-mint" data-theme="mint"></div>
     </div>
   </div>
-
-  <div class="hint">呢個係首階段 demo：時鐘、日期、假天氣、每日一句、主題切換</div>
 
 <script>
   // ---- 時鐘 + 日期 ----
